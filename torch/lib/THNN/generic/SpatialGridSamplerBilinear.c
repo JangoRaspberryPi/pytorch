@@ -44,9 +44,6 @@ TH_API void THNN_(SpatialGridSamplerBilinear_updateOutput)(
 	  
   // resize output to the same shape as input
   THTensor_(resize4d)(output, N, C, H, W);
-  real *idata = THTensor_(data)(input);
-  real *gdata = THTensor_(data)(input);
-  real *odata = THTensor_(data)(output);
 
   // loop over each output pixel
   int n, h, w, c;
@@ -94,6 +91,14 @@ TH_API void THNN_(SpatialGridSamplerBilinear_updateOutput)(
   }
 }
 
+#define SAFE_SET(input, x, y, n, c, H, W, value)		\
+  do {								\
+    if (x >= 0 && x < W && y >=0 && y < H) {			\
+      real old_value = THTensor_fastGet4d(input, n, c, y, x);	\
+      THTensor_fastSet4d(input, n, c, y, x, value + old_value);	\
+    }								\
+  } while(0)
+
 TH_API void THNN_(SpatialGridSamplerBilinear_updateGradInput)(
 	  THNNState *state,
 	  THTensor *input, THTensor *gradInput,
@@ -108,14 +113,80 @@ TH_API void THNN_(SpatialGridSamplerBilinear_updateGradInput)(
 
   THTensor_(resize4d)(gradInput, N, C, H, W);
   THTensor_(resize4d)(gradGrid, N, H, W, 2);
-  
   THTensor_(zero)(gradInput);
   THTensor_(zero)(gradGrid);
-  
 
+  // loop over each output pixel
+  int n, h, w, c;
+  for (n = 0; n < N; ++n) {
+    for (h = 0; h < H; ++h) {
+      for (w = 0; w < W; ++w) {
+	// get the corresponding input x, y co-ordinates from grid
+	real ix = THTensor_fastGet4d(grid, n, h, w, 0);
+	real iy = THTensor_fastGet4d(grid, n, h, w, 1);
+
+	real gix = 0;
+	real giy = 0;
+
+	// normalize ix, iy from [-1, 1] to [0, H-1] & [0, W-1]
+	ix = ((ix + 1) / 2) * (W-1);
+	iy = ((iy + 1) / 2) * (H-1);
+
+	// get NE, NW, SE, SW pixel values from (x, y)
+	int ix_nw = floor(ix);
+	int iy_nw = floor(iy);
+	int ix_ne = ix_nw + 1;
+	int iy_ne = iy_nw;
+	int ix_sw = ix_nw;
+	int iy_sw = iy_nw + 1;
+	int ix_se = ix_nw + 1;
+	int iy_se = iy_nw + 1;
+
+	// get surfaces to each neighbor:
+	real nw = (ix_se - ix)    * (iy_se - iy);
+	real ne = (ix    - ix_sw) * (iy_sw - iy);
+	real sw = (ix_ne - ix)    * (iy    - iy_ne);
+	real se = (ix    - ix_nw) * (iy    - iy_nw);
+	  
+	// calculate bilinear weighted pixel value and set output pixel
+	for (c = 0; c < C; ++c) {
+	  real gradout = THTensor_fastGet4d(gradOutput, n, c, h, w);
+	  SAFE_SET(gradInput, ix_nw, iy_nw, n, c, H, W, nw * gradout);
+	  SAFE_SET(gradInput, ix_ne, iy_ne, n, c, H, W, ne * gradout);
+	  SAFE_SET(gradInput, ix_sw, iy_sw, n, c, H, W, sw * gradout);
+	  SAFE_SET(gradInput, ix_se, iy_se, n, c, H, W, se * gradout);
+
+	  real nw_val = SAFE_GET(input, ix_nw, iy_nw, n, c, H, W);
+	  real ne_val = SAFE_GET(input, ix_ne, iy_ne, n, c, H, W);
+	  real sw_val = SAFE_GET(input, ix_sw, iy_sw, n, c, H, W);
+	  real se_val = SAFE_GET(input, ix_se, iy_se, n, c, H, W);
+
+	  gix -= nw_val * (iy_se - iy) * gradout;
+	  gix += ne_val * (iy_sw - iy) * gradout;
+	  gix -= sw_val * (iy - iy_ne) * gradout;
+	  gix += se_val * (iy - iy_nw) * gradout;
+
+	  giy -= nw_val * (ix_se - ix) * gradout;
+	  giy -= ne_val * (ix - ix_sw) * gradout;
+	  giy += sw_val * (ix_ne - ix) * gradout;
+	  giy += se_val * (ix - ix_nw) * gradout;
+	}
+	gix = gix * (W-1)/2;
+	giy = giy * (H-1)/2;
+	
+	real gix_old = THTensor_fastGet4d(gradGrid, n, h, w, 0);
+	real giy_old = THTensor_fastGet4d(gradGrid, n, h, w, 1);
+
+	THTensor_fastSet4d(gradGrid, n, h, w, 0, gix_old + gix);
+	THTensor_fastSet4d(gradGrid, n, h, w, 1, giy_old + giy);
+
+      }
+    }
+  }
 }
 
 #undef MIN
 #undef SAFE_GET
+#undef SAFE_SET
 
 #endif

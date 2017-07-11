@@ -37,9 +37,14 @@ class Sampler(Function):
             Sampler._enforce_cudnn(input)
             grad_input = input.new(input.size())
             grad_grid = grid.new(grid.size())
-            torch._C._cudnn_sampler_forward(input, grad_input,
+            torch._C._cudnn_sampler_backward(input, grad_input,
                                             grid, grad_grid,
                                             grad_output)
-            return grad_input, grad_grid
         else:
-            raise RuntimeError("CPU Tensors not supported yet")
+            backend = type2backend[type(input)]
+            grad_input = input.new(input.size())
+            grad_grid = grid.new(grid.size())
+            backend.SpatialGridSamplerBilinear_updateGradInput(
+                backend.library_state, input, grad_input,
+                grid, grad_grid, grad_output)
+        return grad_input, grad_grid
