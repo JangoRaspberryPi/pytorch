@@ -9,7 +9,7 @@ from . import _functions
 from .modules import utils
 from ._functions.linear import Bilinear
 from ._functions.padding import ConstantPad2d
-from ._functions.vision import Sampler
+from ._functions.vision import GridSampler
 from ..autograd import _functions as _autograd_functions
 from torch.autograd import Variable
 from .modules.utils import _single, _pair, _triple
@@ -821,10 +821,39 @@ def upsample_bilinear(input, size=None, scale_factor=None):
     warnings.warn("nn.functional.upsample_bilinear is deprecated. Use nn.functional.upsample instead.")
     return upsample(input, size, scale_factor, mode='bilinear')
 
-def sampler(input, grid, mode='bilinear'):
+
+def grid_sample(input, grid, mode='bilinear'):
+    """Given an :attr:`input` and a flow-field :attr:`grid`, computes the
+    `output` using input pixel locations from the grid.
+
+    Uses bilinear interpolation to sample the input pixels.
+    Currently, only spatial (4 dimensional) inputs are supported.
+
+    For each output location, :attr:`grid` has `x` and `y`
+    input pixel locations which are used to compute output.
+
+    :attr:`grid` has values in the range of `[-1, 1]`. This is because the
+    pixel locations are normalized by the input height and width.
+
+    For example, values: x: -1, y: -1 is the left-top pixel of the input
+                 values: x: 1, y: 1 is the right-bottom pixel of the input
+
+    If :attr:`grid` has values outside the range of `[-1, 1]`, those locations
+    are ignored (i.e. 0 is used as a contribution to the bilinear interpolation)
+
+    .. Note:: This function is used in building Spatial Transformer Networks
+
+    Args:
+        input (Variable): input batch of images (N x C x H x W)
+        grid (Variable): flow-field of size (N x H x W x 2)
+
+    Returns:
+        output (Variable): output Tensor
+
+    """
     batch_size, channels, in_height, in_width = input.size()
-    # TODO: grid shape_check to NxHxWx2
-    return Sampler.apply(input, grid)
+    return GridSampler.apply(input, grid)
+
 
 def pad(input, pad, mode='constant', value=0):
     """Pads tensor.

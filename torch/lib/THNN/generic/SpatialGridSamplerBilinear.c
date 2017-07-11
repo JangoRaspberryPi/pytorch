@@ -118,6 +118,7 @@ TH_API void THNN_(SpatialGridSamplerBilinear_updateGradInput)(
 
   // loop over each output pixel
   int n, h, w, c;
+#pragma omp parallel for private(n, h, w, c)
   for (n = 0; n < N; ++n) {
     for (h = 0; h < H; ++h) {
       for (w = 0; w < W; ++w) {
@@ -148,14 +149,16 @@ TH_API void THNN_(SpatialGridSamplerBilinear_updateGradInput)(
 	real sw = (ix_ne - ix)    * (iy    - iy_ne);
 	real se = (ix    - ix_nw) * (iy    - iy_nw);
 	  
-	// calculate bilinear weighted pixel value and set output pixel
 	for (c = 0; c < C; ++c) {
 	  real gradout = THTensor_fastGet4d(gradOutput, n, c, h, w);
+
+	  // calculate and set gradInput
 	  SAFE_SET(gradInput, ix_nw, iy_nw, n, c, H, W, nw * gradout);
 	  SAFE_SET(gradInput, ix_ne, iy_ne, n, c, H, W, ne * gradout);
 	  SAFE_SET(gradInput, ix_sw, iy_sw, n, c, H, W, sw * gradout);
 	  SAFE_SET(gradInput, ix_se, iy_se, n, c, H, W, se * gradout);
 
+	  // calculate gradGrid
 	  real nw_val = SAFE_GET(input, ix_nw, iy_nw, n, c, H, W);
 	  real ne_val = SAFE_GET(input, ix_ne, iy_ne, n, c, H, W);
 	  real sw_val = SAFE_GET(input, ix_sw, iy_sw, n, c, H, W);
@@ -171,14 +174,20 @@ TH_API void THNN_(SpatialGridSamplerBilinear_updateGradInput)(
 	  giy += sw_val * (ix_ne - ix) * gradout;
 	  giy += se_val * (ix - ix_nw) * gradout;
 	}
-	gix = gix * (W-1)/2;
-	giy = giy * (H-1)/2;
-	
-	real gix_old = THTensor_fastGet4d(gradGrid, n, h, w, 0);
-	real giy_old = THTensor_fastGet4d(gradGrid, n, h, w, 1);
 
-	THTensor_fastSet4d(gradGrid, n, h, w, 0, gix_old + gix);
-	THTensor_fastSet4d(gradGrid, n, h, w, 1, giy_old + giy);
+	// un-normalize gradGrid values back to [-1, 1] constraints
+	gix = gix * (W - 1) / 2;
+	giy = giy * (H - 1) / 2;
+
+#pragma omp critical(SpatialGridSamplerBilinear_updateGridGrad)
+	{
+	  // critical section to update gradGrid
+	  real gix_old = THTensor_fastGet4d(gradGrid, n, h, w, 0);
+	  real giy_old = THTensor_fastGet4d(gradGrid, n, h, w, 1);
+
+	  THTensor_fastSet4d(gradGrid, n, h, w, 0, gix_old + gix);
+	  THTensor_fastSet4d(gradGrid, n, h, w, 1, giy_old + giy);
+	}
 
       }
     }

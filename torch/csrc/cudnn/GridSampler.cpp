@@ -1,4 +1,4 @@
-#include "Sampler.h"
+#include "GridSampler.h"
 
 #include "Descriptors.h"
 #include "Types.h"
@@ -64,7 +64,7 @@ void checkIOSize(THVoidTensor *input, THVoidTensor *output)
 
 }  // namespace
 
-void cudnn_sampler_forward(
+void cudnn_grid_sampler_forward(
     THCState* state, cudnnHandle_t handle, cudnnDataType_t dataType,
     THVoidTensor* input, THVoidTensor* grid, THVoidTensor* output)
 {
@@ -89,7 +89,7 @@ void cudnn_sampler_forward(
   ));
 }
 
-void cudnn_sampler_backward(
+void cudnn_grid_sampler_backward(
     THCState* state, cudnnHandle_t handle, cudnnDataType_t dataType,
     THVoidTensor* input, THVoidTensor* grad_input,
     THVoidTensor* grid, THVoidTensor* grad_grid,

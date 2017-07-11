@@ -9,7 +9,7 @@
 #include "Handles.h"
 #include "BatchNorm.h"
 #include "Conv.h"
-#include "Sampler.h"
+#include "GridSampler.h"
 #include "torch/csrc/cuda/THCP.h"
 #include "../PtrWrapper.h"
 
@@ -158,7 +158,7 @@ extern THCState* state;
 ]]
 
 [[
-  name: cudnn_sampler_forward
+  name: cudnn_grid_sampler_forward
   return: void
   arguments:
     - cudnnHandle_t handle
@@ -169,7 +169,7 @@ extern THCState* state;
 ]]
 
 [[
-  name: cudnn_sampler_backward
+  name: cudnn_grid_sampler_backward
   return: void
   arguments:
     - cudnnHandle_t handle
