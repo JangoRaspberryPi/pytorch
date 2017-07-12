@@ -2344,6 +2344,35 @@ class TestNN(NNTestCase):
             out_cuda = F.grid_sample(input, grid)
             self.assertEqual(out_cpu, out_cuda)
 
+    def test_affine_grid(self):
+        # test known input on CPU
+        input = Variable(torch.arange(1, 7).view(1, 2, 3))
+        output = F.affine_grid(input, torch.Size([1, 1, 2, 2]))
+        groundtruth = torch.Tensor(
+            [[[0, -3], [2, 5]], [[4, 7], [6, 15]]]).view(1, 2, 2, 2)
+        self.assertEqual(output.data, groundtruth)
+
+        # do gradcheck
+        N = random.randint(1, 8)
+        C = random.randint(1, 8)
+        H = random.randint(1, 8)
+        W = random.randint(1, 8)
+        sz = torch.Size([N, C, H, W])
+        inp = Variable(torch.randn(N, 2, 3), requires_grad=True)
+        self.assertTrue(gradcheck(lambda inp: F.affine_grid(inp, sz), (inp,)))
+
+        # test CPU against CUDA
+        if TEST_CUDNN:
+            input_cpu = Variable(torch.randn(N, 2, 3), requires_grad=True)
+            out_cpu = F.affine_grid(input_cpu, sz)
+            gradients = torch.randn(out_cpu.size())
+            out_cpu.backward(gradients)
+            input_gpu = Variable(input_cpu.data.cuda(), requires_grad=True)
+            out_cuda = F.affine_grid(input_gpu, sz)
+            out_cuda.backward(gradients.cuda())
+            self.assertEqual(out_cpu, out_cuda)
+            self.assertEqual(input_cpu.grad, input_gpu.grad)
+
     def test_upsamplingNearest2d(self):
         m = nn.Upsample(size=4, mode='nearest')
         in_t = torch.ones(1, 1, 2, 2)

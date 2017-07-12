@@ -9,7 +9,7 @@ from . import _functions
 from .modules import utils
 from ._functions.linear import Bilinear
 from ._functions.padding import ConstantPad2d
-from ._functions.vision import GridSampler
+from ._functions.vision import GridSampler, AffineGridGenerator
 from ..autograd import _functions as _autograd_functions
 from torch.autograd import Variable
 from .modules.utils import _single, _pair, _triple
@@ -853,6 +853,22 @@ def grid_sample(input, grid, mode='bilinear'):
     """
     batch_size, channels, in_height, in_width = input.size()
     return GridSampler.apply(input, grid)
+
+
+def affine_grid(theta, size):
+    """Generates a 2d flow field, given a batch of affine matrices :attr:`theta`
+    Generally used in conjunction with :function:`grid_sample` to
+    implement Spatial Transformer Networks.
+
+    Args:
+        theta (Variable): input batch of affine matrices (N x 2 x 3)
+        size (torch.Size): the target output image size (N x H x W x 2)
+                           Example: torch.Size(32, 3, 24, 24)
+
+    Returns:
+        output (Variable): output Tensor of size (N x H x W x 2)
+    """
+    return AffineGridGenerator.apply(theta, size)
 
 
 def pad(input, pad, mode='constant', value=0):
